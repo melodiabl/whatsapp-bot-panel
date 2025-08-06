@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: whatsapp-bot-panel
+    runtime: node
+    plan: free
+    buildCommand: "npm install && cd frontend-panel && npm install && npm run build"
+    startCommand: "npm run start:production"
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "18"
+      - key: PORT
+        value: 10000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_PASSWORD
+        value: admin123
+      - key: BOT_NAME
+        value: "Melodia WhatsApp Bot"
+      - key: DATABASE_PATH
+        value: "/app/backend/full/storage/database.sqlite"
+      - key: FRONTEND_URL
+        value: "https://${RENDER_SERVICE_NAME}.onrender.com"
+    disk:
+      name: data
+      mountPath: /app/backend/full/storage
+      sizeGB: 1

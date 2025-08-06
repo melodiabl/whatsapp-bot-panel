@@ -61,6 +61,7 @@ const GruposPage: React.FC = () => {
   const [gruposDisponibles, setGruposDisponibles] = useState<GrupoDisponible[]>([]);
   const [loadingGrupos, setLoadingGrupos] = useState(false);
   const [selectedGrupo, setSelectedGrupo] = useState<Grupo | null>(null);
+  const [modalMode, setModalMode] = useState<'authorize' | 'addProvider'>('authorize');
   const [formData, setFormData] = useState({
     jid: '',
     nombre: '',
@@ -111,8 +112,14 @@ const GruposPage: React.FC = () => {
     }
   };
 
-  const handleOpenModal = () => {
+  const handleOpenAuthorizeModal = () => {
+    setModalMode('authorize');
     fetchGruposDisponibles();
+    onOpen();
+  };
+
+  const handleOpenProviderModal = () => {
+    setModalMode('addProvider');
     onOpen();
   };
 
@@ -126,8 +133,13 @@ const GruposPage: React.FC = () => {
 
   const handleSubmit = async () => {
     try {
+      let dataToSend = { ...formData };
+      if (modalMode === 'addProvider' && !selectedGrupo) {
+        dataToSend.tipo = 'general'; // Default type for providers
+      }
+
       if (selectedGrupo) {
-        await api.put(`/grupos/${selectedGrupo.jid}`, formData);
+        await api.put(`/grupos/${selectedGrupo.jid}`, dataToSend);
         toast({
           title: 'Éxito',
           description: 'Grupo actualizado correctamente',
@@ -136,10 +148,10 @@ const GruposPage: React.FC = () => {
           isClosable: true,
         });
       } else {
-        await api.post('/grupos', formData);
+        await api.post('/grupos', dataToSend);
         toast({
           title: 'Éxito',
-          description: 'Grupo autorizado correctamente',
+          description: modalMode === 'addProvider' ? 'Proveedor agregado correctamente' : 'Grupo autorizado correctamente',
           status: 'success',
           duration: 3000,
           isClosable: true,
@@ -185,6 +197,7 @@ const GruposPage: React.FC = () => {
 
   const handleEdit = (grupo: Grupo) => {
     setSelectedGrupo(grupo);
+    setModalMode(grupo.proveedor !== 'General' ? 'addProvider' : 'authorize');
     setFormData({
       jid: grupo.jid,
       nombre: grupo.nombre,
@@ -292,7 +305,7 @@ const GruposPage: React.FC = () => {
       {/* Sección Grupos Autorizados */}
       <HStack justify="space-between" mb={6}>
         <Text fontSize="2xl" fontWeight="bold">Grupos Autorizados</Text>
-        <Button leftIcon={<AddIcon />} colorScheme="teal" onClick={handleOpenModal}>
+        <Button leftIcon={<AddIcon />} colorScheme="teal" onClick={handleOpenAuthorizeModal}>
           Autorizar Grupo
         </Button>
       </HStack>
@@ -320,7 +333,7 @@ const GruposPage: React.FC = () => {
           <Badge colorScheme="purple" fontSize="md" px={3} py={1}>
             {gruposProveedor.length} grupos
           </Badge>
-          <Button leftIcon={<AddIcon />} colorScheme="purple" onClick={handleOpenModal}>
+          <Button leftIcon={<AddIcon />} colorScheme="purple" onClick={handleOpenProviderModal}>
             Agregar Proveedor
           </Button>
         </HStack>
@@ -356,12 +369,12 @@ const GruposPage: React.FC = () => {
         <ModalOverlay />
         <ModalContent>
           <ModalHeader>
-            {selectedGrupo ? 'Editar Grupo' : 'Autorizar Grupo'}
+            {selectedGrupo ? 'Editar Grupo' : modalMode === 'addProvider' ? 'Agregar Proveedor' : 'Autorizar Grupo'}
           </ModalHeader>
           <ModalCloseButton />
           <ModalBody>
             <VStack spacing={4}>
-              {!selectedGrupo && (
+              {!selectedGrupo && modalMode === 'authorize' && (
                 <>
                   <Box w="100%">
                     <Text fontSize="lg" fontWeight="bold" mb={3}>
@@ -425,11 +438,11 @@ const GruposPage: React.FC = () => {
                 <Input
                   value={formData.jid}
                   onChange={(e) => setFormData({ ...formData, jid: e.target.value })}
-                  placeholder={formData.jid ? "Grupo seleccionado automáticamente" : "120363123456789@g.us"}
-                  isDisabled={!!selectedGrupo || !!formData.jid}
-                  bg={formData.jid ? "green.50" : "white"}
+                  placeholder={modalMode === 'authorize' && formData.jid ? "Grupo seleccionado automáticamente" : "120363123456789@g.us"}
+                  isDisabled={!!selectedGrupo || (modalMode === 'authorize' && !!formData.jid)}
+                  bg={modalMode === 'authorize' && formData.jid ? "green.50" : "white"}
                 />
-                {formData.jid && !selectedGrupo && (
+                {modalMode === 'authorize' && formData.jid && !selectedGrupo && (
                   <Text fontSize="xs" color="green.600" mt={1}>
                     ✓ Grupo seleccionado de la lista disponible
                   </Text>
@@ -441,27 +454,29 @@ const GruposPage: React.FC = () => {
                 <Input
                   value={formData.nombre}
                   onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                  placeholder={formData.nombre ? "Nombre obtenido automáticamente" : "Nombre del grupo"}
-                  bg={formData.jid && formData.nombre ? "green.50" : "white"}
+                  placeholder={modalMode === 'authorize' && formData.nombre ? "Nombre obtenido automáticamente" : "Nombre del grupo"}
+                  bg={modalMode === 'authorize' && formData.jid && formData.nombre ? "green.50" : "white"}
                 />
-                {formData.jid && formData.nombre && !selectedGrupo && (
+                {modalMode === 'authorize' && formData.jid && formData.nombre && !selectedGrupo && (
                   <Text fontSize="xs" color="green.600" mt={1}>
                     ✓ Nombre obtenido automáticamente del bot
                   </Text>
                 )}
               </FormControl>
 
-              <FormControl isRequired>
-                <FormLabel>Tipo de Grupo</FormLabel>
-                <Select
-                  value={formData.tipo}
-                  onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
-                >
-                  <option value="general">General</option>
-                  <option value="vip">VIP</option>
-                  <option value="moderado">Moderado</option>
-                </Select>
-              </FormControl>
+              {modalMode === 'authorize' && (
+                <FormControl isRequired>
+                  <FormLabel>Tipo de Grupo</FormLabel>
+                  <Select
+                    value={formData.tipo}
+                    onChange={(e) => setFormData({ ...formData, tipo: e.target.value })}
+                  >
+                    <option value="general">General</option>
+                    <option value="vip">VIP</option>
+                    <option value="moderado">Moderado</option>
+                  </Select>
+                </FormControl>
+              )}
 
               <FormControl>
                 <FormLabel>Proveedor</FormLabel>
@@ -538,7 +553,7 @@ const GruposPage: React.FC = () => {
               Cancelar
             </Button>
             <Button colorScheme="teal" onClick={handleSubmit}>
-              {selectedGrupo ? 'Actualizar' : 'Autorizar'}
+              {selectedGrupo ? 'Actualizar' : modalMode === 'addProvider' ? 'Agregar Proveedor' : 'Autorizar'}
             </Button>
           </ModalFooter>
         </ModalContent>
