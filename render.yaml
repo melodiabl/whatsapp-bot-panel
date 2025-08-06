@@ -3,8 +3,8 @@ services:
     name: whatsapp-bot-panel
     runtime: node
     plan: free
-    buildCommand: npm install && cd backend/full && npm install
-    startCommand: npm run start:production
+    buildCommand: echo "Skipping frontend build - backend only"
+    startCommand: cd backend/full && node index.js
     envVars:
       - key: NODE_ENV
         value: production
