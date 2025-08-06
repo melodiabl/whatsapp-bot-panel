@@ -14,8 +14,8 @@
     "dev": "concurrently \"npm run dev:full\" \"npm run dev:frontend\"",
     "dev:lite-mode": "concurrently \"npm run dev:lite\" \"npm run dev:frontend\"",
     "install:all": "npm install && cd frontend-panel && npm install",
-    "build": "cd frontend-panel && npm run build",
-    "build:production": "npm run build",
+    "build": "echo 'Skipping frontend build - backend only'",
+    "build:production": "echo 'Skipping frontend build - backend only'",
     "postinstall": "cd frontend-panel && npm install",
     "railway:init": "node scripts/railway-init.js",
     "railway:build": "npm run railway:init"
