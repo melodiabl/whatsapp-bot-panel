@@ -1,0 +1,19 @@
+{
+  "watch": [
+    "*.js",
+    "!storage/**",
+    "!logs/**",
+    "!tests/**",
+    "!node_modules/**"
+  ],
+  "ignore": [
+    "storage/baileys_full/**",
+    "storage/database.sqlite",
+    "logs/**",
+    "*.log"
+  ],
+  "delay": 2000,
+  "env": {
+    "NODE_ENV": "development"
+  }
+}

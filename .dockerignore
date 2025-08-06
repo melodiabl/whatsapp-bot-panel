@@ -1,0 +1,53 @@
+# Node modules
+node_modules/
+frontend-panel/node_modules/
+
+# Development files
+.git/
+.gitignore
+README.md
+*.md
+
+# Development tools
+.vscode/
+.idea/
+
+# Logs
+*.log
+logs/
+backend/full/logs/
+backend/lite/logs/
+
+# Environment files
+.env.local
+.env.development
+.env.test
+
+# Build artifacts
+frontend-panel/dist/
+build/
+
+# Test files
+**/*.test.js
+**/*.spec.js
+coverage/
+
+# Temporary files
+.tmp/
+temp/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Development scripts
+start-frontend.bat
+test-*.js
+
+# Backup files
+*_backup.*
