@@ -55,7 +55,7 @@ render auth whoami
 render services create web \
   --name whatsapp-bot-panel \
   --repo https://gitlab.com/melodiabl-group/whatsapp-bot-panel \
-  --branch upload-project \
+  --branch main \
   --build-command "echo 'Skipping frontend build - backend only'" \
   --start-command "cd backend/full && node index.js" \
   --plan free \
