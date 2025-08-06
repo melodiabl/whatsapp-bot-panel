@@ -1,9 +1,9 @@
 services:
   - type: web
     name: whatsapp-bot-panel
-    env: node
+    runtime: node
     plan: free
-    buildCommand: npm run railway:build
+    buildCommand: npm install && cd backend/full && npm install
     startCommand: npm run start:production
     envVars:
       - key: NODE_ENV
