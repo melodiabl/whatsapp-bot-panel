@@ -464,6 +464,31 @@ const GruposPage: React.FC = () => {
               </FormControl>
 
               <FormControl>
+                <FormLabel>Proveedor</FormLabel>
+                <Select
+                  value={formData.proveedor}
+                  onChange={(e) => setFormData({ ...formData, proveedor: e.target.value })}
+                >
+                  <option value="General">General</option>
+                  <option value="BL Manhwas">BL Manhwas</option>
+                  <option value="BL Links">BL Links (Canales)</option>
+                  <option value="Premium">Premium</option>
+                  <option value="Premium Links">Premium Links (Canales)</option>
+                  <option value="Ilustraciones">Ilustraciones</option>
+                  <option value="Packs">Packs</option>
+                  <option value="Novelas">Novelas</option>
+                  <option value="Manhwas Yaoi">Manhwas Yaoi</option>
+                  <option value="Manhwas Yuri">Manhwas Yuri</option>
+                  <option value="Manhwas Hetero">Manhwas Hetero</option>
+                  <option value="Doujinshi">Doujinshi</option>
+                  <option value="Anime">Anime</option>
+                  <option value="Links Externos">Links Externos</option>
+                  <option value="Canal BL">Canal BL</option>
+                  <option value="Otro">Otro</option>
+                </Select>
+              </FormControl>
+
+              <FormControl>
                 <FormLabel>Mensajes Mínimos para Comandos</FormLabel>
                 <NumberInput
                   value={formData.min_messages}

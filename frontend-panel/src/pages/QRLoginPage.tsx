@@ -24,9 +24,12 @@ export function QRLoginPage() {
     setIsLoading(true);
     try {
       const response = await whatsappService.getQR();
-      if (response.qr) {
-        setQrCode(response.qr);
+      if (response.qr || response.qrCodeImage) {
+        setQrCode(response.qr || response.qrCodeImage);
         setStatus('waiting_for_scan');
+      } else if (response.available === false) {
+        setQrCode(null);
+        setStatus('disconnected');
       } else {
         setQrCode(null);
         setStatus('disconnected');
@@ -147,7 +150,7 @@ export function QRLoginPage() {
                 </Text>
                 <Box p={4} bg="white" borderRadius="md" boxShadow="md">
                   <Image 
-                    src={`data:image/png;base64,${qrCode}`} 
+                    src={qrCode && qrCode.startsWith('data:') ? qrCode : `data:image/png;base64,${qrCode || ''}`} 
                     alt="QR Code para WhatsApp"
                     maxW="300px"
                     maxH="300px"

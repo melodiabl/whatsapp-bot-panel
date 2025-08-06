@@ -2,6 +2,10 @@ import express from 'express';
 import { getDb } from './index.js';
 import { authenticateToken, authorizeRoles } from './auth.js';
 import { getQRCode, getQRCodeImage, getConnectionStatus, getAvailableGroups } from './whatsapp.js';
+import {
+  getProviderStats,
+  getProviderAportes
+} from './auto-provider-handler.js';
 
 const router = express.Router();
 
@@ -58,12 +62,95 @@ router.get('/pedidos', async (req, res) => {
   }
 });
 
-// Get logs
+// Get logs with filtering
 router.get('/logs', async (req, res) => {
   try {
     const db = getDatabase();
-    const logs = await db.all('SELECT * FROM logs ORDER BY fecha DESC LIMIT 100');
+    const { tipo, limit = 100 } = req.query;
+    
+    let query = 'SELECT * FROM logs';
+    let params = [];
+    
+    if (tipo) {
+      query += ' WHERE tipo = ?';
+      params.push(tipo);
+    }
+    
+    query += ' ORDER BY fecha DESC LIMIT ?';
+    params.push(parseInt(limit));
+    
+    const logs = await db.all(query, params);
     res.json(logs);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get logs by category
+router.get('/logs/categoria/:categoria', async (req, res) => {
+  try {
+    const db = getDatabase();
+    const { categoria } = req.params;
+    const { limit = 50 } = req.query;
+    
+    const logs = await db.all(
+      'SELECT * FROM logs WHERE tipo = ? ORDER BY fecha DESC LIMIT ?',
+      [categoria, parseInt(limit)]
+    );
+    
+    res.json(logs);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get log statistics
+router.get('/logs/stats', async (req, res) => {
+  try {
+    const db = getDatabase();
+    
+    const stats = await db.all(`
+      SELECT 
+        tipo,
+        COUNT(*) as cantidad,
+        MAX(fecha) as ultimo_registro
+      FROM logs 
+      GROUP BY tipo 
+      ORDER BY cantidad DESC
+    `);
+    
+    const total = await db.get('SELECT COUNT(*) as total FROM logs');
+    
+    res.json({
+      total: total.total,
+      por_categoria: stats
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create log entry (for control and configuration)
+router.post('/logs', authenticateToken, authorizeRoles('admin', 'owner'), async (req, res) => {
+  try {
+    const db = getDatabase();
+    const { tipo, comando, detalles } = req.body;
+    const fecha = new Date().toISOString();
+    const usuario = req.user.username;
+    
+    // Validar tipos permitidos
+    const tiposPermitidos = ['control', 'configuracion', 'sistema', 'comando', 'ai_command', 'clasificar_command', 'administracion'];
+    if (!tiposPermitidos.includes(tipo)) {
+      return res.status(400).json({ error: 'Tipo de log no válido' });
+    }
+    
+    const stmt = await db.prepare(
+      'INSERT INTO logs (tipo, comando, usuario, grupo, fecha, detalles) VALUES (?, ?, ?, ?, ?, ?)'
+    );
+    await stmt.run(tipo, comando, usuario, null, fecha, detalles || null);
+    await stmt.finalize();
+    
+    res.json({ success: true, message: 'Log registrado correctamente' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -84,7 +171,7 @@ router.get('/grupos', async (req, res) => {
 router.get('/usuarios', async (req, res) => {
   try {
     const db = getDatabase();
-    const usuarios = await db.all('SELECT id, username, rol FROM usuarios');
+    const usuarios = await db.all('SELECT id, username, rol, whatsapp_number, grupo_registro, fecha_registro FROM usuarios');
     res.json(usuarios);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -325,7 +412,6 @@ router.delete('/grupos/:jid', authenticateToken, authorizeRoles('admin', 'owner'
   }
 });
 
-
 // Dashboard stats endpoint
 router.get('/dashboard/stats', async (req, res) => {
   try {
@@ -384,6 +470,65 @@ router.put('/usuarios/:id', authenticateToken, authorizeRoles('admin', 'owner'),
   }
 });
 
+// Edición completa de usuario (admin/owner)
+router.put('/usuarios/:id/full-edit', authenticateToken, authorizeRoles('admin', 'owner'), async (req, res) => {
+  try {
+    const db = getDatabase();
+    const { id } = req.params;
+    const { username, rol, whatsapp_number } = req.body;
+    
+    if (!username || !rol) {
+      return res.status(400).json({ error: 'Username y rol son requeridos' });
+    }
+    
+    if (!['admin', 'colaborador', 'usuario', 'owner'].includes(rol)) {
+      return res.status(400).json({ error: 'Rol no válido' });
+    }
+    
+    // Verificar que el nuevo username no exista (si se está cambiando)
+    const currentUser = await db.get('SELECT username FROM usuarios WHERE id = ?', [id]);
+    if (currentUser.username !== username) {
+      const existingUser = await db.get('SELECT id FROM usuarios WHERE username = ? AND id != ?', [username, id]);
+      if (existingUser) {
+        return res.status(400).json({ error: 'El nombre de usuario ya existe' });
+      }
+    }
+    
+    const stmt = await db.prepare('UPDATE usuarios SET username = ?, rol = ?, whatsapp_number = ? WHERE id = ?');
+    await stmt.run(username, rol, whatsapp_number || null, id);
+    await stmt.finalize();
+    
+    res.json({ success: true, message: 'Usuario actualizado completamente' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Reset password de usuario (admin/owner)
+router.post('/usuarios/:id/reset-password', authenticateToken, authorizeRoles('admin', 'owner'), async (req, res) => {
+  try {
+    const db = getDatabase();
+    const { id } = req.params;
+    
+    // Generar nueva contraseña temporal
+    const newTempPassword = Math.random().toString(36).slice(-8);
+    const bcrypt = await import('bcrypt');
+    const hashedPassword = await bcrypt.hash(newTempPassword, 10);
+    
+    const stmt = await db.prepare('UPDATE usuarios SET password = ? WHERE id = ?');
+    await stmt.run(hashedPassword, id);
+    await stmt.finalize();
+    
+    res.json({ 
+      success: true, 
+      message: 'Contraseña restablecida correctamente',
+      tempPassword: newTempPassword
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // WhatsApp Bot endpoints
 router.get('/whatsapp/status', async (req, res) => {
   try {
@@ -408,8 +553,22 @@ router.get('/whatsapp/qr', async (req, res) => {
     
     res.json({
       available: true,
+      qr: qrCodeImage || qrCode, // Para compatibilidad con frontend
       qrCode: qrCode,
       qrCodeImage: qrCodeImage
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/whatsapp/logout', async (req, res) => {
+  try {
+    // Aquí podrías agregar lógica para desconectar el bot si es necesario
+    // Por ahora solo devolvemos éxito
+    res.json({ 
+      success: true, 
+      message: 'Bot desconectado correctamente' 
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -420,6 +579,75 @@ router.get('/whatsapp/groups', authenticateToken, authorizeRoles('admin', 'owner
   try {
     const groups = await getAvailableGroups();
     res.json(groups);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Rutas para sistema de proveedores automático
+router.get('/proveedores/estadisticas', authenticateToken, async (req, res) => {
+  try {
+    const stats = await getProviderStats();
+    res.json(stats);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/proveedores/aportes', authenticateToken, async (req, res) => {
+  try {
+    const filtros = {
+      proveedor: req.query.proveedor || '',
+      manhwa: req.query.manhwa || '',
+      tipo: req.query.tipo || '',
+      fecha_desde: req.query.fecha_desde || '',
+      fecha_hasta: req.query.fecha_hasta || '',
+      limit: parseInt(req.query.limit) || 100
+    };
+    
+    const aportes = await getProviderAportes(filtros);
+    res.json(aportes);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/proveedores/download/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = getDatabase();
+    
+    // Obtener información del archivo
+    const aporte = await db.get(
+      'SELECT archivo_path, manhwa_titulo FROM aportes WHERE id = ? AND tipo = ?',
+      [id, 'proveedor_auto']
+    );
+    
+    if (!aporte) {
+      return res.status(404).json({ error: 'Archivo no encontrado' });
+    }
+    
+    const fs = await import('fs');
+    const path = await import('path');
+    
+    // Verificar si el archivo existe
+    if (!fs.existsSync(aporte.archivo_path)) {
+      return res.status(404).json({ error: 'Archivo no encontrado en el sistema' });
+    }
+    
+    // Obtener información del archivo
+    const fileName = path.basename(aporte.archivo_path);
+    const fileStats = fs.statSync(aporte.archivo_path);
+    
+    // Configurar headers para descarga
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Length', fileStats.size);
+    
+    // Enviar archivo
+    const fileStream = fs.createReadStream(aporte.archivo_path);
+    fileStream.pipe(res);
+    
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

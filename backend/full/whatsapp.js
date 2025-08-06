@@ -37,6 +37,30 @@ import {
   handleUnban
 } from './commands-complete.js';
 
+import {
+  handleAI as handleGeminiAI,
+  handleClasificar,
+  handleListClasificados,
+  logControlAction,
+  logConfigurationChange,
+  handleLogs as handleLogsCommand,
+  handleConfig
+} from './commands.js';
+
+import {
+  handleDescargar,
+  handleGuardar,
+  handleArchivos,
+  handleMisArchivos,
+  handleEstadisticas,
+  handleLimpiar,
+  handleBuscarArchivo
+} from './download-commands.js';
+
+import {
+  processProviderMessage
+} from './auto-provider-handler.js';
+
 let sock;
 let qrCode = null;
 let qrCodeImage = null;
@@ -309,6 +333,88 @@ async function handleMessage(message) {
       result = await handleUnban(usuarioUnban);
       break;
 
+    // Comandos de descarga y almacenamiento
+    case '/descargar':
+      if (args.length < 3) {
+        await sock.sendMessage(remoteJid, { text: 'Uso: /descargar <url> <nombre> <categoria>\nCategorías: manhwa, serie, extra, ilustracion, pack' });
+        return;
+      }
+      const [url, nombre, categoriaDescarga] = args;
+      result = await handleDescargar(url, nombre, categoriaDescarga, usuario, grupo);
+      break;
+
+    case '/guardar':
+      if (args.length === 0) {
+        await sock.sendMessage(remoteJid, { text: 'Uso: /guardar <categoria>\nCategorías: manhwa, serie, extra, ilustracion, pack\n\n*Envía este comando como respuesta a una imagen, video o documento.*' });
+        return;
+      }
+      // Obtener mensaje citado si existe
+      const quotedMessage = message.message.extendedTextMessage?.contextInfo?.quotedMessage ? {
+        message: message.message.extendedTextMessage.contextInfo.quotedMessage,
+        key: message.message.extendedTextMessage.contextInfo
+      } : message;
+      result = await handleGuardar(args[0], usuario, grupo, quotedMessage);
+      break;
+
+    case '/archivos':
+      const categoriaFiltro = args[0] || null;
+      result = await handleArchivos(categoriaFiltro, usuario, grupo);
+      break;
+
+    case '/misarchivos':
+      result = await handleMisArchivos(usuario, grupo);
+      break;
+
+    case '/estadisticas':
+      result = await handleEstadisticas(usuario, grupo);
+      break;
+
+    case '/limpiar':
+      result = await handleLimpiar(usuario, grupo);
+      break;
+
+    case '/buscararchivo':
+      if (args.length === 0) {
+        await sock.sendMessage(remoteJid, { text: 'Uso: /buscararchivo <nombre>' });
+        return;
+      }
+      result = await handleBuscarArchivo(args.join(' '), usuario, grupo);
+      break;
+
+    // Comandos de IA con Gemini
+    case '/ai':
+      if (args.length === 0) {
+        await sock.sendMessage(remoteJid, { text: 'Uso: /ai <pregunta>\n\nEjemplo: /ai ¿Qué es Jinx?' });
+        return;
+      }
+      result = await handleGeminiAI(args.join(' '), usuario, grupo, fecha);
+      break;
+
+    case '/clasificar':
+      if (args.length === 0) {
+        await sock.sendMessage(remoteJid, { text: 'Uso: /clasificar <texto>\n\nEjemplo: /clasificar Jinx capítulo 45' });
+        return;
+      }
+      result = await handleClasificar(args.join(' '), usuario, grupo, fecha);
+      break;
+
+    case '/listclasificados':
+      result = await handleListClasificados(usuario, grupo, fecha);
+      break;
+
+    // Comandos de logs y configuración
+    case '/logssystem':
+    case '/systemlogs':
+      const categoria = args[0] || null;
+      result = await handleLogsCommand(categoria, usuario, grupo, fecha);
+      break;
+
+    case '/config':
+      const parametro = args[0] || null;
+      const valor = args[1] || null;
+      result = await handleConfig(parametro, valor, usuario, grupo, fecha);
+      break;
+
     // Comando de estado (legacy)
     case '/estado':
       await sock.sendMessage(remoteJid, {
@@ -420,7 +526,27 @@ async function connectToWhatsApp(authPath) {
       const message = m.messages[0];
       if (!message.key.fromMe && message.message) {
         try {
+          // Procesar comandos normales
           await handleMessage(message);
+          
+          // Procesar automáticamente archivos de grupos proveedores
+          const remoteJid = message.key.remoteJid;
+          const isGroup = remoteJid.endsWith('@g.us');
+          
+          if (isGroup) {
+            // Intentar procesar como mensaje de proveedor automático sin obtener info del grupo
+            try {
+              const providerResult = await processProviderMessage(message, remoteJid, 'Grupo');
+              if (providerResult && providerResult.success) {
+                console.log(`📥 Aporte automático procesado: ${providerResult.description}`);
+              }
+            } catch (providerError) {
+              // Error silencioso para no interrumpir el flujo normal
+              if (providerError.message !== 'No es grupo proveedor') {
+                console.error('⚠️ Error procesando proveedor automático:', providerError.message);
+              }
+            }
+          }
         } catch (error) {
           console.error('❌ Error procesando mensaje:', error);
         }

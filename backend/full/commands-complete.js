@@ -107,6 +107,16 @@ async function handleHelp(usuario, grupo, isGroup) {
   helpText += `/obtenerilustracion [nombre] - Guardar ilustración desde proveedor\n`;
   helpText += `/obtenerpack [nombre] - Descargar pack desde proveedor\n\n`;
   
+  // Comandos de descarga y almacenamiento
+  helpText += `*🔹 Sistema de descarga y almacenamiento:*\n`;
+  helpText += `/descargar [url] [nombre] [categoria] - Descargar archivo desde URL\n`;
+  helpText += `/guardar [categoria] - Guardar archivo multimedia del chat\n`;
+  helpText += `/archivos [categoria] - Listar archivos descargados\n`;
+  helpText += `/misarchivos - Ver tus archivos descargados\n`;
+  helpText += `/buscararchivo [nombre] - Buscar archivos por nombre\n`;
+  helpText += `/estadisticas - Ver estadísticas de descargas (Admin)\n`;
+  helpText += `/limpiar - Limpiar archivos antiguos (Admin)\n\n`;
+  
   // Comandos de moderación
   helpText += `*🔹 Moderación:*\n`;
   helpText += `/ban @usuario [motivo] - Banear usuario\n`;
@@ -691,9 +701,9 @@ async function handleCrearVotacion(datos, usuario, grupo) {
   }
   
   try {
-    const parts = datos.split('|');
+    const parts = datos.split('|').map(part => part.trim());
     if (parts.length < 3) {
-      return { success: false, message: '❌ Formato: pregunta | opción1 | opción2 | ...' };
+      return { success: false, message: '❌ Formato: pregunta | opción1 | opción2 | ...\n\nEjemplo: /crearvotacion ¿Cuál es tu manhwa favorito? | Solo Leveling | Tower of God | The Beginning After The End' };
     }
     
     const [titulo, ...opciones] = parts;
@@ -703,12 +713,37 @@ async function handleCrearVotacion(datos, usuario, grupo) {
     const stmt = await db.prepare(
       'INSERT INTO votaciones (titulo, descripcion, opciones, fecha_inicio, fecha_fin, estado, creador) VALUES (?, ?, ?, ?, ?, ?, ?)'
     );
-    await stmt.run(titulo, '', JSON.stringify(opciones), fecha_inicio, fecha_fin, 'activa', usuario);
+    const result = await stmt.run(titulo, '', JSON.stringify(opciones), fecha_inicio, fecha_fin, 'activa', usuario);
     await stmt.finalize();
     
+    const votacionId = result.lastID;
+    
+    // Crear mensaje de votación para el grupo
+    let mensajeVotacion = `🗳️ *NUEVA VOTACIÓN INICIADA*\n\n`;
+    mensajeVotacion += `📋 **${titulo}**\n\n`;
+    mensajeVotacion += `📊 *Opciones disponibles:*\n`;
+    
+    opciones.forEach((opcion, index) => {
+      mensajeVotacion += `${index + 1}. ${opcion}\n`;
+    });
+    
+    mensajeVotacion += `\n⏰ *Duración:* 7 días\n`;
+    mensajeVotacion += `👤 *Creada por:* @${usuario}\n`;
+    mensajeVotacion += `🆔 *ID:* #${votacionId}\n\n`;
+    mensajeVotacion += `💡 *Para votar usa:* /votar [opción]\n`;
+    mensajeVotacion += `📝 *Ejemplo:* /votar ${opciones[0]}\n\n`;
+    mensajeVotacion += `_¡Participa y haz que tu voz sea escuchada!_ 🎯`;
+    
     await logCommand('administracion', 'crearvotacion', usuario, grupo);
-    return { success: true, message: `✅ Votación "${titulo}" creada correctamente.` };
+    
+    return { 
+      success: true, 
+      message: mensajeVotacion,
+      votacionCreada: true,
+      votacionId: votacionId
+    };
   } catch (error) {
+    console.error('Error al crear votación:', error);
     return { success: false, message: 'Error al crear votación.' };
   }
 }
