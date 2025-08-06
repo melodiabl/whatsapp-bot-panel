@@ -1,11 +1,11 @@
-run = "node backend/full/index.js"
+run = "npm install && node backend/full/index.js"
 entrypoint = "backend/full/index.js"
 
 [nix]
 channel = "stable-22_11"
 
 [deployment]
-run = ["sh", "-c", "node backend/full/index.js"]
+run = ["sh", "-c", "npm install && node backend/full/index.js"]
 
 [env]
 NODE_ENV = "production"
