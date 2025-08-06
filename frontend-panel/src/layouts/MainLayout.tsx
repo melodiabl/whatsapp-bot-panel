@@ -15,7 +15,7 @@ import { SunIcon, MoonIcon } from '@chakra-ui/icons';
 import { useColorMode } from '@chakra-ui/react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { usePermissions } from '../hooks/usePermissions';
+// import { usePermissions } from '../hooks/usePermissions';
 import { 
   FaWhatsapp, 
   FaTachometerAlt, 

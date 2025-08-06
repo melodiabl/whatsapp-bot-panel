@@ -1,0 +1,38 @@
+{
+  "version": 2,
+  "name": "whatsapp-bot-panel",
+  "builds": [
+    {
+      "src": "backend/full/index.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "frontend-panel/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "backend/full/index.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "frontend-panel/dist/$1"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production",
+    "JWT_SECRET": "@jwt_secret",
+    "ADMIN_PASSWORD": "@admin_password",
+    "BOT_NAME": "Melodia WhatsApp Bot"
+  },
+  "functions": {
+    "backend/full/index.js": {
+      "maxDuration": 30
+    }
+  }
+}
