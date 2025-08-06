@@ -7,19 +7,26 @@
 
 ## 📥 **PASO 1: INSTALAR RENDER CLI**
 
-### **Windows (Recomendado):**
+### **macOS/Linux (Homebrew - RECOMENDADO):**
 ```bash
-# Opción 1: Descargar directamente
-# Ve a: https://github.com/render-oss/cli/releases
-# Descarga: render-windows-amd64.exe
-# Renombra a: render.exe
-# Mueve a: C:\Windows\System32\ (para uso global)
+# Actualizar Homebrew
+brew update
 
-# Opción 2: Con PowerShell
+# Instalar Render CLI
+brew install render
+```
+
+### **Windows:**
+```bash
+# Opción 1: Con PowerShell
 iwr -useb https://cli.render.com/install.ps1 | iex
 
-# Opción 3: Con Chocolatey
+# Opción 2: Con Chocolatey
 choco install render-cli
+
+# Opción 3: Descargar directamente
+# Ve a: https://github.com/render-oss/cli/releases
+# Descarga: render-windows-amd64.exe
 ```
 
 ### **Verificar Instalación:**
