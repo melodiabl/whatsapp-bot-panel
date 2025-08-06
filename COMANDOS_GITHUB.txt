@@ -1,0 +1,52 @@
+========================================
+   COMANDOS PARA SUBIR A GITHUB
+========================================
+
+TU PROYECTO YA ESTA LISTO CON COMMITS HECHOS!
+
+PASO 1: CREAR REPOSITORIO EN GITHUB
+====================================
+1. Ve a: https://github.com/new
+2. Repository name: whatsapp-bot-panel
+3. Description: WhatsApp Bot Panel con React y Node.js
+4. Marcar como PUBLIC
+5. NO marcar "Add a README file"
+6. Click "Create repository"
+
+PASO 2: EJECUTAR ESTOS COMANDOS
+===============================
+Copia y pega estos comandos UNO POR UNO en tu terminal:
+
+git remote add origin https://github.com/TU-USUARIO/whatsapp-bot-panel.git
+git branch -M main
+git push -u origin main
+
+(Reemplaza TU-USUARIO con tu nombre de usuario de GitHub)
+
+PASO 3: VERIFICAR
+=================
+- Ve a tu repositorio en GitHub
+- Deberías ver todos tus archivos
+- Verifica que aparezcan: render.yaml, package.json, etc.
+
+PASO 4: DESPLEGAR EN RENDER (GRATIS)
+====================================
+1. Ve a: https://render.com
+2. Regístrate con GitHub
+3. Click "New +" → "Web Service"
+4. Selecciona tu repositorio "whatsapp-bot-panel"
+5. Configuración automática (ya tienes render.yaml)
+6. Click "Create Web Service"
+
+URLS FINALES:
+=============
+- Panel: https://whatsapp-bot-panel.onrender.com
+- Login: admin / admin123
+
+DONDE VER NOTIFICACIONES EN GITHUB:
+===================================
+1. GitHub Actions: https://github.com/TU-USUARIO/whatsapp-bot-panel/actions
+2. Notifications: Campana en esquina superior derecha
+3. Environments: Settings → Environments (después de conectar Render)
+
+¡LISTO! Tu bot estará en internet en unos minutos.

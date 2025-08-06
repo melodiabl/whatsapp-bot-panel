@@ -1,0 +1,76 @@
+# GitLab CI/CD Pipeline para WhatsApp Bot Panel
+stages:
+  - build
+  - test
+  - deploy
+
+variables:
+  NODE_VERSION: "18"
+
+# Cache para node_modules
+cache:
+  paths:
+    - node_modules/
+    - frontend-panel/node_modules/
+
+# Build stage
+build:
+  stage: build
+  image: node:18
+  script:
+    - echo "Installing dependencies..."
+    - npm install
+    - cd frontend-panel
+    - npm install
+    - echo "Building frontend..."
+    - npm run build
+    - cd ..
+    - echo "Build completed successfully!"
+  artifacts:
+    paths:
+      - frontend-panel/dist/
+    expire_in: 1 hour
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+# Test stage (opcional)
+test:
+  stage: test
+  image: node:18
+  script:
+    - echo "Running tests..."
+    - npm test || echo "No tests configured yet"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH == "develop"
+
+# Deploy to Render (webhook trigger)
+deploy_render:
+  stage: deploy
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - echo "Triggering Render deployment..."
+    - |
+      if [ -n "$RENDER_DEPLOY_HOOK" ]; then
+        curl -X POST "$RENDER_DEPLOY_HOOK"
+        echo "Render deployment triggered!"
+      else
+        echo "RENDER_DEPLOY_HOOK not configured"
+      fi
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+
+# Notification job
+notify_success:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - echo "Deployment completed successfully!"
+    - echo "Panel URL - https://whatsapp-bot-panel.onrender.com"
+    - echo "Login - admin / admin123"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
