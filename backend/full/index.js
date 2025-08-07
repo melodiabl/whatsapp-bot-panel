@@ -1,18 +1,16 @@
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
 import { connectToWhatsApp, getAvailableGroups } from './whatsapp.js';
-import { initializeDatabase } from './init-db.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import db from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
-const port = process.env.PORT || 3001;
+const port = process.env.PORT || 3000;
 
 // CORS configuration for production and development
 const corsOptions = {
@@ -32,31 +30,13 @@ if (process.env.NODE_ENV === 'production') {
   app.use(express.static(frontendDistPath));
 }
 
-let db;
-
-async function initDb() {
-  db = await open({
-    filename: join(__dirname, 'storage', 'database.sqlite'),
-    driver: sqlite3.Database,
-  });
-  
-  // Usar el inicializador completo
-  await initializeDatabase(db);
-  return db;
-}
-
-// Función para obtener la instancia de la base de datos
-export function getDb() {
-  return db;
-}
-
 // Example API endpoint: get dashboard stats
 app.get('/api/dashboard/stats', async (req, res) => {
   try {
-    const usuariosCount = await db.get('SELECT COUNT(*) as count FROM usuarios');
-    const aportesCount = await db.get('SELECT COUNT(*) as count FROM aportes');
-    const pedidosCount = await db.get('SELECT COUNT(*) as count FROM pedidos');
-    const gruposCount = await db.get('SELECT COUNT(*) as count FROM grupos_autorizados');
+    const usuariosCount = await db('usuarios').count('id as count').first();
+    const aportesCount = await db('aportes').count('id as count').first();
+    const pedidosCount = await db('pedidos').count('id as count').first();
+    const gruposCount = await db('grupos_autorizados').count('id as count').first();
 
     res.json({
       usuarios: usuariosCount.count,
@@ -157,7 +137,6 @@ if (process.env.NODE_ENV === 'production') {
 
 // Start the bot connection and server
 async function start() {
-  await initDb();
   await connectToWhatsApp(join(__dirname, 'storage', 'baileys_full'));
   app.listen(port, '0.0.0.0', () => {
     console.log(`Backend server listening on port ${port}`);

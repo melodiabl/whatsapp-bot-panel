@@ -5,20 +5,22 @@
   "type": "module",
   "scripts": {
     "start": "npm run start:production",
-    "start:production": "cd backend/full && node index.js",
+    "start:production": "npx knex migrate:latest --knexfile backend/full/knexfile.js && cd backend/full && node index.js",
     "start:full": "cd backend/full && node index.js",
     "start:lite": "cd backend/lite && node index.js",
     "dev:full": "nodemon backend/full/index.js",
     "dev:lite": "nodemon backend/lite/index.js",
     "dev:frontend": "cd frontend-panel && npm run dev",
-    "dev": "concurrently \"npm run dev:full\" \"npm run dev:frontend\"",
+    "dev": "nodemon backend/full/index.js",
     "dev:lite-mode": "concurrently \"npm run dev:lite\" \"npm run dev:frontend\"",
     "install:all": "npm install && cd frontend-panel && npm install",
-    "build": "echo 'Skipping frontend build - backend only'",
-    "build:production": "echo 'Skipping frontend build - backend only'",
+    "build": "cd frontend-panel && npm run build",
+    "build:production": "cd frontend-panel && npm run build",
     "postinstall": "cd frontend-panel && npm install",
     "railway:init": "node scripts/railway-init.js",
-    "railway:build": "npm run railway:init"
+    "railway:build": "npm run railway:init",
+    "migrate": "npx knex migrate:latest --knexfile backend/full/knexfile.js",
+    "migrate:make": "npx knex migrate:make --knexfile backend/full/knexfile.js"
   },
   "dependencies": {
     "@chakra-ui/icons": "^2.2.4",
@@ -33,6 +35,8 @@
     "dotenv": "^16.3.1",
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.1",
+    "knex": "^3.1.0",
+    "pg": "^8.11.3",
     "pino": "^8.21.0",
     "pino-pretty": "^10.3.1",
     "qrcode": "^1.5.4",
@@ -41,7 +45,6 @@
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.7.1",
     "react-scripts": "^0.0.0",
-    "sqlite": "^5.1.1",
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
@@ -53,6 +56,7 @@
     "jest": "^30.0.5",
     "ts-jest": "^29.4.1",
     "typescript": "^5.9.2",
-    "vite": "^7.0.6"
+    "vite": "^7.0.6",
+    "nodemon": "^3.0.1"
   }
 }

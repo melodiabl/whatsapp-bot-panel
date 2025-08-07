@@ -1,7 +1,7 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
-import { getDb } from './index.js';
+import db from './db.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this';
@@ -17,8 +17,7 @@ const authenticateToken = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const db = getDb();
-    const user = await db.get('SELECT id, username, rol FROM usuarios WHERE username = ?', [decoded.username]);
+    const user = await db('usuarios').where({ username: decoded.username }).select('id', 'username', 'rol').first();
     
     if (!user) {
       return res.status(403).json({ error: 'Usuario no válido' });
@@ -50,8 +49,7 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
     }
 
-    const db = getDb();
-    const user = await db.get('SELECT * FROM usuarios WHERE username = ?', [username]);
+    const user = await db('usuarios').where({ username }).first();
     
     if (!user) {
       return res.status(401).json({ error: 'Credenciales inválidas' });
@@ -92,17 +90,16 @@ router.post('/register', authenticateToken, authorizeRoles('admin', 'owner'), as
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const db = getDb();
     
-    const stmt = await db.prepare(
-      'INSERT INTO usuarios (username, password, rol) VALUES (?, ?, ?)'
-    );
-    await stmt.run(username, hashedPassword, rol);
-    await stmt.finalize();
+    await db('usuarios').insert({
+      username,
+      password: hashedPassword,
+      rol
+    });
 
     res.json({ success: true, message: 'Usuario creado correctamente' });
   } catch (error) {
-    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' || error.code === '23505') {
       return res.status(400).json({ error: 'El usuario ya existe' });
     }
     res.status(500).json({ error: error.message });
@@ -119,15 +116,14 @@ router.post('/auto-register', async (req, res) => {
     }
 
     // Verificar que el grupo esté autorizado
-    const db = getDb();
-    const grupoAutorizado = await db.get('SELECT * FROM grupos_autorizados WHERE jid = ?', [grupo_jid]);
+    const grupoAutorizado = await db('grupos_autorizados').where({ jid: grupo_jid }).first();
     
     if (!grupoAutorizado) {
       return res.status(403).json({ error: 'Grupo no autorizado para registro automático' });
     }
 
     // Verificar si el usuario ya existe
-    const existingUser = await db.get('SELECT * FROM usuarios WHERE username = ?', [username]);
+    const existingUser = await db('usuarios').where({ username }).first();
     if (existingUser) {
       return res.status(400).json({ error: 'El nombre de usuario ya existe' });
     }
@@ -136,11 +132,14 @@ router.post('/auto-register', async (req, res) => {
     const tempPassword = Math.random().toString(36).slice(-8);
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
     
-    const stmt = await db.prepare(
-      'INSERT INTO usuarios (username, password, rol, whatsapp_number, grupo_registro, fecha_registro) VALUES (?, ?, ?, ?, ?, ?)'
-    );
-    await stmt.run(username, hashedPassword, 'usuario', whatsapp_number, grupo_jid, new Date().toISOString());
-    await stmt.finalize();
+    await db('usuarios').insert({
+      username,
+      password: hashedPassword,
+      rol: 'usuario',
+      whatsapp_number,
+      grupo_registro: grupo_jid,
+      fecha_registro: new Date()
+    });
 
     res.json({ 
       success: true, 
@@ -149,7 +148,7 @@ router.post('/auto-register', async (req, res) => {
       username: username
     });
   } catch (error) {
-    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+    if (error.code === 'SQLITE_CONSTRAINT_UNIQUE' || error.code === '23505') {
       return res.status(400).json({ error: 'El usuario ya existe' });
     }
     res.status(500).json({ error: error.message });
@@ -165,8 +164,7 @@ router.post('/reset-password', async (req, res) => {
       return res.status(400).json({ error: 'Número de WhatsApp y username son requeridos' });
     }
 
-    const db = getDb();
-    const user = await db.get('SELECT * FROM usuarios WHERE username = ? AND whatsapp_number = ?', [username, whatsapp_number]);
+    const user = await db('usuarios').where({ username, whatsapp_number }).first();
     
     if (!user) {
       return res.status(404).json({ error: 'Usuario no encontrado o número de WhatsApp no coincide' });
@@ -176,9 +174,7 @@ router.post('/reset-password', async (req, res) => {
     const newTempPassword = Math.random().toString(36).slice(-8);
     const hashedPassword = await bcrypt.hash(newTempPassword, 10);
     
-    const stmt = await db.prepare('UPDATE usuarios SET password = ? WHERE id = ?');
-    await stmt.run(hashedPassword, user.id);
-    await stmt.finalize();
+    await db('usuarios').where({ id: user.id }).update({ password: hashedPassword });
 
     res.json({ 
       success: true, 
@@ -200,8 +196,7 @@ router.post('/change-password', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Contraseña actual y nueva contraseña son requeridas' });
     }
 
-    const db = getDb();
-    const user = await db.get('SELECT * FROM usuarios WHERE username = ?', [req.user.username]);
+    const user = await db('usuarios').where({ username: req.user.username }).first();
     
     const isValidPassword = await bcrypt.compare(currentPassword, user.password);
     if (!isValidPassword) {
@@ -209,9 +204,7 @@ router.post('/change-password', authenticateToken, async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    const stmt = await db.prepare('UPDATE usuarios SET password = ? WHERE id = ?');
-    await stmt.run(hashedPassword, user.id);
-    await stmt.finalize();
+    await db('usuarios').where({ id: user.id }).update({ password: hashedPassword });
 
     res.json({ success: true, message: 'Contraseña cambiada correctamente' });
   } catch (error) {

@@ -1,4 +1,4 @@
-import { db } from './index.js';
+import db from './db.js';
 import { analyzeContentWithAI } from './gemini-ai-handler.js';
 
 /**
@@ -11,11 +11,7 @@ import { analyzeContentWithAI } from './gemini-ai-handler.js';
  */
 async function handleAportar(contenido, tipo, usuario, grupo, fecha) {
   try {
-    const stmt = await db.prepare(
-      'INSERT INTO aportes (contenido, tipo, usuario, grupo, fecha) VALUES (?, ?, ?, ?, ?)'
-    );
-    await stmt.run(contenido, tipo, usuario, grupo, fecha);
-    await stmt.finalize();
+    await db('aportes').insert({ contenido, tipo, usuario, grupo, fecha });
     return { success: true, message: `Aporte guardado correctamente para el usuario ${usuario}.` };
   } catch (error) {
     return { success: false, message: error.message };
@@ -31,11 +27,7 @@ async function handleAportar(contenido, tipo, usuario, grupo, fecha) {
  */
 async function handlePedido(texto, usuario, grupo, fecha) {
   try {
-    const stmt = await db.prepare(
-      'INSERT INTO pedidos (texto, estado, usuario, grupo, fecha) VALUES (?, ?, ?, ?, ?)'
-    );
-    await stmt.run(texto, 'pendiente', usuario, grupo, fecha);
-    await stmt.finalize();
+    await db('pedidos').insert({ texto, estado: 'pendiente', usuario, grupo, fecha });
     return { success: true, message: `Pedido guardado correctamente para el usuario ${usuario}.` };
   } catch (error) {
     return { success: false, message: error.message };
@@ -50,11 +42,7 @@ async function handlePedido(texto, usuario, grupo, fecha) {
  */
 async function handleBan(usuario, motivo, fecha) {
   try {
-    const stmt = await db.prepare(
-      'INSERT OR REPLACE INTO baneados (usuario, motivo, fecha) VALUES (?, ?, ?)'
-    );
-    await stmt.run(usuario, motivo, fecha);
-    await stmt.finalize();
+    await db('baneados').insert({ usuario, motivo, fecha }).onConflict('usuario').merge();
     return { success: true, message: 'Usuario baneado correctamente.' };
   } catch (error) {
     return { success: false, message: error.message };
@@ -67,11 +55,7 @@ async function handleBan(usuario, motivo, fecha) {
  */
 async function handleUnban(usuario) {
   try {
-    const stmt = await db.prepare(
-      'DELETE FROM baneados WHERE usuario = ?'
-    );
-    await stmt.run(usuario);
-    await stmt.finalize();
+    await db('baneados').where({ usuario }).del();
     return { success: true, message: 'Usuario desbaneado correctamente.' };
   } catch (error) {
     return { success: false, message: error.message };
@@ -107,22 +91,18 @@ Por favor proporciona una respuesta informativa y concisa. Si es sobre manhwa, a
     const finalResponse = `🤖 *Respuesta de IA:*\n\n${aiResponse}\n\n_Procesado por Gemini AI_`;
     
     // Registrar en logs
-    const stmt = await db.prepare(
-      'INSERT INTO logs (tipo, comando, usuario, grupo, fecha, detalles) VALUES (?, ?, ?, ?, ?, ?)'
-    );
-    await stmt.run(
-      'ai_command',
-      '/ai',
+    await db('logs').insert({
+      tipo: 'ai_command',
+      comando: '/ai',
       usuario,
       grupo,
       fecha,
-      JSON.stringify({
+      detalles: JSON.stringify({
         pregunta: pregunta,
         respuesta: aiResponse,
         timestamp: fecha
       })
-    );
-    await stmt.finalize();
+    });
     
     return { success: true, message: finalResponse };
     
@@ -158,22 +138,18 @@ async function handleClasificar(texto, usuario, grupo, fecha) {
                       `_Análisis realizado por Gemini AI_`;
       
       // Registrar en logs
-      const stmt = await db.prepare(
-        'INSERT INTO logs (tipo, comando, usuario, grupo, fecha, detalles) VALUES (?, ?, ?, ?, ?, ?)'
-      );
-      await stmt.run(
-        'clasificar_command',
-        '/clasificar',
+      await db('logs').insert({
+        tipo: 'clasificar_command',
+        comando: '/clasificar',
         usuario,
         grupo,
         fecha,
-        JSON.stringify({
+        detalles: JSON.stringify({
           texto: texto,
           resultado: aiResult.data,
           timestamp: fecha
         })
-      );
-      await stmt.finalize();
+      });
       
       return { success: true, message: response };
     } else {
@@ -202,13 +178,11 @@ async function handleListClasificados(usuario, grupo, fecha) {
     console.log(`📋 Comando /listclasificados recibido de ${usuario}`);
     
     // Obtener aportes automáticos clasificados
-    const aportes = await db.all(`
-      SELECT manhwa_titulo, contenido_tipo, proveedor, fecha, contenido
-      FROM aportes 
-      WHERE tipo = 'proveedor_auto' 
-      ORDER BY fecha DESC 
-      LIMIT 20
-    `);
+    const aportes = await db('aportes')
+      .where({ tipo: 'proveedor_auto' })
+      .select('manhwa_titulo', 'contenido_tipo', 'proveedor', 'fecha', 'contenido')
+      .orderBy('fecha', 'desc')
+      .limit(20);
 
     if (aportes.length === 0) {
       return { 
@@ -249,18 +223,14 @@ async function handleListClasificados(usuario, grupo, fecha) {
  */
 async function logControlAction(accion, usuario, grupo, fecha, detalles = {}) {
   try {
-    const stmt = await db.prepare(
-      'INSERT INTO logs (tipo, comando, usuario, grupo, fecha, detalles) VALUES (?, ?, ?, ?, ?, ?)'
-    );
-    await stmt.run(
-      'control',
-      accion,
+    await db('logs').insert({
+      tipo: 'control',
+      comando: accion,
       usuario,
       grupo,
       fecha,
-      JSON.stringify(detalles)
-    );
-    await stmt.finalize();
+      detalles: JSON.stringify(detalles)
+    });
     return { success: true };
   } catch (error) {
     console.error('Error logging control action:', error);
@@ -278,18 +248,14 @@ async function logControlAction(accion, usuario, grupo, fecha, detalles = {}) {
  */
 async function logConfigurationChange(configuracion, usuario, grupo, fecha, detalles = {}) {
   try {
-    const stmt = await db.prepare(
-      'INSERT INTO logs (tipo, comando, usuario, grupo, fecha, detalles) VALUES (?, ?, ?, ?, ?, ?)'
-    );
-    await stmt.run(
-      'configuracion',
-      configuracion,
+    await db('logs').insert({
+      tipo: 'configuracion',
+      comando: configuracion,
       usuario,
       grupo,
       fecha,
-      JSON.stringify(detalles)
-    );
-    await stmt.finalize();
+      detalles: JSON.stringify(detalles)
+    });
     return { success: true };
   } catch (error) {
     console.error('Error logging configuration change:', error);
@@ -308,17 +274,13 @@ async function handleLogs(categoria, usuario, grupo, fecha) {
   try {
     console.log(`📋 Comando /logs recibido de ${usuario}, categoría: ${categoria || 'todas'}`);
     
-    let query = 'SELECT * FROM logs';
-    let params = [];
+    let query = db('logs').select('*');
     
     if (categoria && ['control', 'configuracion', 'sistema', 'comando', 'ai_command', 'clasificar_command'].includes(categoria)) {
-      query += ' WHERE tipo = ?';
-      params.push(categoria);
+      query = query.where({ tipo: categoria });
     }
     
-    query += ' ORDER BY fecha DESC LIMIT 20';
-    
-    const logs = await db.all(query, params);
+    const logs = await query.orderBy('fecha', 'desc').limit(20);
     
     if (logs.length === 0) {
       return { 
@@ -376,7 +338,7 @@ async function handleConfig(parametro, valor, usuario, grupo, fecha) {
     
     if (!parametro) {
       // Show current configuration
-      const configs = await db.all('SELECT * FROM configuracion ORDER BY parametro');
+      const configs = await db('configuracion').select('*').orderBy('parametro');
       
       let response = `⚙️ *Configuración del Bot:*\n\n`;
       
@@ -403,11 +365,7 @@ async function handleConfig(parametro, valor, usuario, grupo, fecha) {
     }
     
     // Update configuration
-    const stmt = await db.prepare(
-      'INSERT OR REPLACE INTO configuracion (parametro, valor, usuario_modificacion, fecha_modificacion) VALUES (?, ?, ?, ?)'
-    );
-    await stmt.run(parametro, valor, usuario, fecha);
-    await stmt.finalize();
+    await db('configuracion').insert({ parametro, valor, usuario_modificacion: usuario, fecha_modificacion: fecha }).onConflict('parametro').merge();
     
     // Log configuration change
     await logConfigurationChange('/config', usuario, grupo, fecha, {
@@ -459,7 +417,8 @@ async function handleRegistrarUsuario(username, usuario, grupo, fecha) {
     const whatsappNumber = usuario.split('@')[0];
     
     // Llamar al endpoint de auto-registro
-    const response = await fetch('http://localhost:3001/api/auth/auto-register', {
+    const apiUrl = process.env.NODE_ENV === 'production' ? `https://${process.env.RENDER_SERVICE_NAME}.onrender.com/api/auth/auto-register` : 'http://localhost:3000/api/auth/auto-register';
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -483,7 +442,7 @@ async function handleRegistrarUsuario(username, usuario, grupo, fecha) {
 
       return { 
         success: true, 
-        message: `✅ *¡Registro Exitoso!*\n\n👤 *Usuario:* ${result.username}\n🔑 *Contraseña temporal:* \`${result.tempPassword}\`\n\n🌐 *Panel:* https://tu-proyecto.onrender.com\n\n⚠️ *IMPORTANTE:* Cambia tu contraseña después del primer login\n\n💡 *Tip:* Guarda esta información en un lugar seguro` 
+        message: `✅ *¡Registro Exitoso!*\n\n👤 *Usuario:* ${result.username}\n🔑 *Contraseña temporal:* \`${result.tempPassword}\`\n\n🌐 *Panel:* ${process.env.FRONTEND_URL}\n\n⚠️ *IMPORTANTE:* Cambia tu contraseña después del primer login\n\n💡 *Tip:* Guarda esta información en un lugar seguro` 
       };
     } else {
       return { 
@@ -521,7 +480,8 @@ async function handleResetPassword(username, usuario, grupo, fecha) {
     const whatsappNumber = usuario.split('@')[0];
 
     // Llamar al endpoint de reset password
-    const response = await fetch('http://localhost:3001/api/auth/reset-password', {
+    const apiUrl = process.env.NODE_ENV === 'production' ? `https://${process.env.RENDER_SERVICE_NAME}.onrender.com/api/auth/reset-password` : 'http://localhost:3000/api/auth/reset-password';
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -544,7 +504,7 @@ async function handleResetPassword(username, usuario, grupo, fecha) {
 
       return { 
         success: true, 
-        message: `✅ *¡Contraseña Restablecida!*\n\n👤 *Usuario:* ${result.username}\n🔑 *Nueva contraseña temporal:* \`${result.tempPassword}\`\n\n🌐 *Panel:* https://tu-proyecto.onrender.com\n\n⚠️ *IMPORTANTE:* Cambia tu contraseña después del login` 
+        message: `✅ *¡Contraseña Restablecida!*\n\n👤 *Usuario:* ${result.username}\n🔑 *Nueva contraseña temporal:* \`${result.tempPassword}\`\n\n🌐 *Panel:* ${process.env.FRONTEND_URL}\n\n⚠️ *IMPORTANTE:* Cambia tu contraseña después del login` 
       };
     } else {
       return { 
@@ -574,7 +534,7 @@ async function handleMiInfo(usuario, grupo, fecha) {
     const whatsappNumber = usuario.split('@')[0];
     
     // Buscar usuario por número de WhatsApp
-    const user = await db.get('SELECT username, rol, fecha_registro FROM usuarios WHERE whatsapp_number = ?', [whatsappNumber]);
+    const user = await db('usuarios').where({ whatsapp_number: whatsappNumber }).select('username', 'rol', 'fecha_registro').first();
     
     if (!user) {
       return { 
@@ -590,7 +550,7 @@ async function handleMiInfo(usuario, grupo, fecha) {
 
     return { 
       success: true, 
-      message: `👤 *Tu Información*\n\n🏷️ *Usuario:* ${user.username}\n📱 *WhatsApp:* ${whatsappNumber}\n${rolDisplay}\n📅 *Registrado:* ${fechaRegistro}\n\n🌐 *Panel:* https://tu-proyecto.onrender.com` 
+      message: `👤 *Tu Información*\n\n🏷️ *Usuario:* ${user.username}\n📱 *WhatsApp:* ${whatsappNumber}\n${rolDisplay}\n📅 *Registrado:* ${fechaRegistro}\n\n🌐 *Panel:* ${process.env.FRONTEND_URL}` 
     };
   } catch (error) {
     console.error('Error en mi info:', error);

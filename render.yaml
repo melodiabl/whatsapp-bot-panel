@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     buildCommand: "npm install && cd frontend-panel && npm install && npm run build"
-    startCommand: "npm run start:production"
+    startCommand: "cd backend/full && node index.js"
     envVars:
       - key: NODE_ENV
         value: production
@@ -19,10 +19,6 @@ services:
       - key: BOT_NAME
         value: "Melodia WhatsApp Bot"
       - key: DATABASE_PATH
-        value: "/app/backend/full/storage/database.sqlite"
+        value: "/tmp/database.sqlite"
       - key: FRONTEND_URL
         value: "https://${RENDER_SERVICE_NAME}.onrender.com"
-    disk:
-      name: data
-      mountPath: /app/backend/full/storage
-      sizeGB: 1

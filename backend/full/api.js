@@ -1,5 +1,5 @@
 import express from 'express';
-import { getDb } from './index.js';
+import db from './db.js';
 import { authenticateToken, authorizeRoles } from './auth.js';
 import { getQRCode, getQRCodeImage, getConnectionStatus, getAvailableGroups } from './whatsapp.js';
 import {
@@ -9,20 +9,10 @@ import {
 
 const router = express.Router();
 
-// Helper function to get database instance
-const getDatabase = () => {
-  const db = getDb();
-  if (!db) {
-    throw new Error('Database not initialized');
-  }
-  return db;
-};
-
 // Get votaciones
 router.get('/votaciones', async (req, res) => {
   try {
-    const db = getDatabase();
-    const votaciones = await db.all('SELECT * FROM votaciones');
+    const votaciones = await db('votaciones').select('*');
     res.json(votaciones);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -32,8 +22,7 @@ router.get('/votaciones', async (req, res) => {
 // Get manhwas
 router.get('/manhwas', async (req, res) => {
   try {
-    const db = getDatabase();
-    const manhwas = await db.all('SELECT * FROM manhwas');
+    const manhwas = await db('manhwas').select('*');
     res.json(manhwas);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -43,8 +32,7 @@ router.get('/manhwas', async (req, res) => {
 // Get aportes
 router.get('/aportes', async (req, res) => {
   try {
-    const db = getDatabase();
-    const aportes = await db.all('SELECT * FROM aportes ORDER BY fecha DESC');
+    const aportes = await db('aportes').select('*').orderBy('fecha', 'desc');
     res.json(aportes);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -54,8 +42,7 @@ router.get('/aportes', async (req, res) => {
 // Get pedidos
 router.get('/pedidos', async (req, res) => {
   try {
-    const db = getDatabase();
-    const pedidos = await db.all('SELECT * FROM pedidos ORDER BY fecha DESC');
+    const pedidos = await db('pedidos').select('*').orderBy('fecha', 'desc');
     res.json(pedidos);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -65,21 +52,15 @@ router.get('/pedidos', async (req, res) => {
 // Get logs with filtering
 router.get('/logs', async (req, res) => {
   try {
-    const db = getDatabase();
     const { tipo, limit = 100 } = req.query;
     
-    let query = 'SELECT * FROM logs';
-    let params = [];
+    let query = db('logs').select('*');
     
     if (tipo) {
-      query += ' WHERE tipo = ?';
-      params.push(tipo);
+      query = query.where({ tipo });
     }
     
-    query += ' ORDER BY fecha DESC LIMIT ?';
-    params.push(parseInt(limit));
-    
-    const logs = await db.all(query, params);
+    const logs = await query.orderBy('fecha', 'desc').limit(parseInt(limit));
     res.json(logs);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -89,14 +70,13 @@ router.get('/logs', async (req, res) => {
 // Get logs by category
 router.get('/logs/categoria/:categoria', async (req, res) => {
   try {
-    const db = getDatabase();
     const { categoria } = req.params;
     const { limit = 50 } = req.query;
     
-    const logs = await db.all(
-      'SELECT * FROM logs WHERE tipo = ? ORDER BY fecha DESC LIMIT ?',
-      [categoria, parseInt(limit)]
-    );
+    const logs = await db('logs')
+      .where({ tipo: categoria })
+      .orderBy('fecha', 'desc')
+      .limit(parseInt(limit));
     
     res.json(logs);
   } catch (error) {
@@ -107,19 +87,14 @@ router.get('/logs/categoria/:categoria', async (req, res) => {
 // Get log statistics
 router.get('/logs/stats', async (req, res) => {
   try {
-    const db = getDatabase();
+    const stats = await db('logs')
+      .select('tipo')
+      .count('* as cantidad')
+      .max('fecha as ultimo_registro')
+      .groupBy('tipo')
+      .orderBy('cantidad', 'desc');
     
-    const stats = await db.all(`
-      SELECT 
-        tipo,
-        COUNT(*) as cantidad,
-        MAX(fecha) as ultimo_registro
-      FROM logs 
-      GROUP BY tipo 
-      ORDER BY cantidad DESC
-    `);
-    
-    const total = await db.get('SELECT COUNT(*) as total FROM logs');
+    const total = await db('logs').count('* as total').first();
     
     res.json({
       total: total.total,
@@ -133,9 +108,8 @@ router.get('/logs/stats', async (req, res) => {
 // Create log entry (for control and configuration)
 router.post('/logs', authenticateToken, authorizeRoles('admin', 'owner'), async (req, res) => {
   try {
-    const db = getDatabase();
     const { tipo, comando, detalles } = req.body;
-    const fecha = new Date().toISOString();
+    const fecha = new Date();
     const usuario = req.user.username;
     
     // Validar tipos permitidos
@@ -144,11 +118,14 @@ router.post('/logs', authenticateToken, authorizeRoles('admin', 'owner'), async 
       return res.status(400).json({ error: 'Tipo de log no válido' });
     }
     
-    const stmt = await db.prepare(
-      'INSERT INTO logs (tipo, comando, usuario, grupo, fecha, detalles) VALUES (?, ?, ?, ?, ?, ?)'
-    );
-    await stmt.run(tipo, comando, usuario, null, fecha, detalles || null);
-    await stmt.finalize();
+    await db('logs').insert({
+      tipo,
+      comando,
+      usuario,
+      grupo: null,
+      fecha,
+      detalles: detalles || null
+    });
     
     res.json({ success: true, message: 'Log registrado correctamente' });
   } catch (error) {
@@ -159,8 +136,7 @@ router.post('/logs', authenticateToken, authorizeRoles('admin', 'owner'), async 
 // Get grupos autorizados
 router.get('/grupos', async (req, res) => {
   try {
-    const db = getDatabase();
-    const grupos = await db.all('SELECT * FROM grupos_autorizados');
+    const grupos = await db('grupos_autorizados').select('*');
     res.json(grupos);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -170,8 +146,7 @@ router.get('/grupos', async (req, res) => {
 // Get usuarios
 router.get('/usuarios', async (req, res) => {
   try {
-    const db = getDatabase();
-    const usuarios = await db.all('SELECT id, username, rol, whatsapp_number, grupo_registro, fecha_registro FROM usuarios');
+    const usuarios = await db('usuarios').select('id', 'username', 'rol', 'whatsapp_number', 'grupo_registro', 'fecha_registro');
     res.json(usuarios);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -181,16 +156,19 @@ router.get('/usuarios', async (req, res) => {
 // CRUD para Votaciones
 router.post('/votaciones', authenticateToken, authorizeRoles('admin', 'owner', 'colaborador'), async (req, res) => {
   try {
-    const db = getDatabase();
     const { titulo, descripcion, opciones, fecha_fin } = req.body;
-    const fecha_inicio = new Date().toISOString();
+    const fecha_inicio = new Date();
     const creador = req.user.username;
     
-    const stmt = await db.prepare(
-      'INSERT INTO votaciones (titulo, descripcion, opciones, fecha_inicio, fecha_fin, estado, creador) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    );
-    await stmt.run(titulo, descripcion, JSON.stringify(opciones), fecha_inicio, fecha_fin, 'activa', creador);
-    await stmt.finalize();
+    await db('votaciones').insert({
+      titulo,
+      descripcion,
+      opciones: JSON.stringify(opciones),
+      fecha_inicio,
+      fecha_fin,
+      estado: 'activa',
+      creador
+    });
     
     res.json({ success: true, message: 'Votación creada correctamente' });
   } catch (error) {
@@ -200,15 +178,16 @@ router.post('/votaciones', authenticateToken, authorizeRoles('admin', 'owner', '
 
 router.put('/votaciones/:id', authenticateToken, authorizeRoles('admin', 'owner', 'colaborador'), async (req, res) => {
   try {
-    const db = getDatabase();
     const { id } = req.params;
     const { titulo, descripcion, opciones, fecha_fin, estado } = req.body;
     
-    const stmt = await db.prepare(
-      'UPDATE votaciones SET titulo = ?, descripcion = ?, opciones = ?, fecha_fin = ?, estado = ? WHERE id = ?'
-    );
-    await stmt.run(titulo, descripcion, JSON.stringify(opciones), fecha_fin, estado, id);
-    await stmt.finalize();
+    await db('votaciones').where({ id }).update({
+      titulo,
+      descripcion,
+      opciones: JSON.stringify(opciones),
+      fecha_fin,
+      estado
+    });
     
     res.json({ success: true, message: 'Votación actualizada correctamente' });
   } catch (error) {
@@ -218,11 +197,10 @@ router.put('/votaciones/:id', authenticateToken, authorizeRoles('admin', 'owner'
 
 router.delete('/votaciones/:id', authenticateToken, authorizeRoles('admin', 'owner'), async (req, res) => {
   try {
-    const db = getDatabase();
     const { id } = req.params;
     
-    await db.run('DELETE FROM votos WHERE votacion_id = ?', [id]);
-    await db.run('DELETE FROM votaciones WHERE id = ?', [id]);
+    await db('votos').where({ votacion_id: id }).del();
+    await db('votaciones').where({ id }).del();
     
     res.json({ success: true, message: 'Votación eliminada correctamente' });
   } catch (error) {
@@ -233,16 +211,21 @@ router.delete('/votaciones/:id', authenticateToken, authorizeRoles('admin', 'own
 // CRUD para Manhwas
 router.post('/manhwas', authenticateToken, authorizeRoles('admin', 'owner', 'colaborador'), async (req, res) => {
   try {
-    const db = getDatabase();
     const { titulo, autor, genero, estado, descripcion, url, proveedor } = req.body;
-    const fecha_registro = new Date().toISOString();
+    const fecha_registro = new Date();
     const usuario_registro = req.user.username;
     
-    const stmt = await db.prepare(
-      'INSERT INTO manhwas (titulo, autor, genero, estado, descripcion, url, proveedor, fecha_registro, usuario_registro) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    );
-    await stmt.run(titulo, autor, genero, estado, descripcion, url, proveedor, fecha_registro, usuario_registro);
-    await stmt.finalize();
+    await db('manhwas').insert({
+      titulo,
+      autor,
+      genero,
+      estado,
+      descripcion,
+      url,
+      proveedor,
+      fecha_registro,
+      usuario_registro
+    });
     
     res.json({ success: true, message: 'Manhwa agregado correctamente' });
   } catch (error) {
@@ -252,15 +235,18 @@ router.post('/manhwas', authenticateToken, authorizeRoles('admin', 'owner', 'col
 
 router.put('/manhwas/:id', authenticateToken, authorizeRoles('admin', 'owner', 'colaborador'), async (req, res) => {
   try {
-    const db = getDatabase();
     const { id } = req.params;
     const { titulo, autor, genero, estado, descripcion, url, proveedor } = req.body;
     
-    const stmt = await db.prepare(
-      'UPDATE manhwas SET titulo = ?, autor = ?, genero = ?, estado = ?, descripcion = ?, url = ?, proveedor = ? WHERE id = ?'
-    );
-    await stmt.run(titulo, autor, genero, estado, descripcion, url, proveedor, id);
-    await stmt.finalize();
+    await db('manhwas').where({ id }).update({
+      titulo,
+      autor,
+      genero,
+      estado,
+      descripcion,
+      url,
+      proveedor
+    });
     
     res.json({ success: true, message: 'Manhwa actualizado correctamente' });
   } catch (error) {
@@ -270,10 +256,9 @@ router.put('/manhwas/:id', authenticateToken, authorizeRoles('admin', 'owner', '
 
 router.delete('/manhwas/:id', authenticateToken, authorizeRoles('admin', 'owner'), async (req, res) => {
   try {
-    const db = getDatabase();
     const { id } = req.params;
     
-    await db.run('DELETE FROM manhwas WHERE id = ?', [id]);
+    await db('manhwas').where({ id }).del();
     
     res.json({ success: true, message: 'Manhwa eliminado correctamente' });
   } catch (error) {
@@ -284,16 +269,17 @@ router.delete('/manhwas/:id', authenticateToken, authorizeRoles('admin', 'owner'
 // Create aporte (para usuarios)
 router.post('/aportes', authenticateToken, async (req, res) => {
   try {
-    const db = getDatabase();
     const { contenido, tipo, grupo } = req.body;
-    const fecha = new Date().toISOString();
+    const fecha = new Date();
     const usuario = req.user.username;
     
-    const stmt = await db.prepare(
-      'INSERT INTO aportes (contenido, tipo, usuario, grupo, fecha) VALUES (?, ?, ?, ?, ?)'
-    );
-    await stmt.run(contenido, tipo, usuario, grupo, fecha);
-    await stmt.finalize();
+    await db('aportes').insert({
+      contenido,
+      tipo,
+      usuario,
+      grupo,
+      fecha
+    });
     
     res.json({ success: true, message: 'Aporte creado correctamente' });
   } catch (error) {
@@ -303,10 +289,9 @@ router.post('/aportes', authenticateToken, async (req, res) => {
 
 router.delete('/aportes/:id', authenticateToken, authorizeRoles('admin', 'owner', 'colaborador'), async (req, res) => {
   try {
-    const db = getDatabase();
     const { id } = req.params;
     
-    await db.run('DELETE FROM aportes WHERE id = ?', [id]);
+    await db('aportes').where({ id }).del();
     
     res.json({ success: true, message: 'Aporte eliminado correctamente' });
   } catch (error) {
@@ -317,16 +302,17 @@ router.delete('/aportes/:id', authenticateToken, authorizeRoles('admin', 'owner'
 // Create pedido (para usuarios)
 router.post('/pedidos', authenticateToken, async (req, res) => {
   try {
-    const db = getDatabase();
     const { texto, grupo } = req.body;
-    const fecha = new Date().toISOString();
+    const fecha = new Date();
     const usuario = req.user.username;
     
-    const stmt = await db.prepare(
-      'INSERT INTO pedidos (texto, estado, usuario, grupo, fecha) VALUES (?, ?, ?, ?, ?)'
-    );
-    await stmt.run(texto, 'pendiente', usuario, grupo, fecha);
-    await stmt.finalize();
+    await db('pedidos').insert({
+      texto,
+      estado: 'pendiente',
+      usuario,
+      grupo,
+      fecha
+    });
     
     res.json({ success: true, message: 'Pedido creado correctamente' });
   } catch (error) {
@@ -336,13 +322,10 @@ router.post('/pedidos', authenticateToken, async (req, res) => {
 
 router.put('/pedidos/:id', authenticateToken, authorizeRoles('admin', 'owner', 'colaborador'), async (req, res) => {
   try {
-    const db = getDatabase();
     const { id } = req.params;
     const { estado } = req.body;
     
-    const stmt = await db.prepare('UPDATE pedidos SET estado = ? WHERE id = ?');
-    await stmt.run(estado, id);
-    await stmt.finalize();
+    await db('pedidos').where({ id }).update({ estado });
     
     res.json({ success: true, message: 'Estado del pedido actualizado' });
   } catch (error) {
@@ -352,10 +335,9 @@ router.put('/pedidos/:id', authenticateToken, authorizeRoles('admin', 'owner', '
 
 router.delete('/pedidos/:id', authenticateToken, authorizeRoles('admin', 'owner', 'colaborador'), async (req, res) => {
   try {
-    const db = getDatabase();
     const { id } = req.params;
     
-    await db.run('DELETE FROM pedidos WHERE id = ?', [id]);
+    await db('pedidos').where({ id }).del();
     
     res.json({ success: true, message: 'Pedido eliminado correctamente' });
   } catch (error) {
@@ -366,14 +348,18 @@ router.delete('/pedidos/:id', authenticateToken, authorizeRoles('admin', 'owner'
 // CRUD para Grupos
 router.post('/grupos', authenticateToken, authorizeRoles('admin', 'owner'), async (req, res) => {
   try {
-    const db = getDatabase();
     const { jid, nombre, tipo, proveedor, min_messages, max_warnings, enable_warnings, enable_restriction } = req.body;
     
-    const stmt = await db.prepare(
-      'INSERT INTO grupos_autorizados (jid, nombre, tipo, proveedor, min_messages, max_warnings, enable_warnings, enable_restriction) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    );
-    await stmt.run(jid, nombre, tipo, proveedor || 'General', min_messages || 100, max_warnings || 3, enable_warnings !== false, enable_restriction !== false);
-    await stmt.finalize();
+    await db('grupos_autorizados').insert({
+      jid,
+      nombre,
+      tipo,
+      proveedor: proveedor || 'General',
+      min_messages: min_messages || 100,
+      max_warnings: max_warnings || 3,
+      enable_warnings: enable_warnings !== false,
+      enable_restriction: enable_restriction !== false
+    });
     
     res.json({ success: true, message: 'Grupo autorizado correctamente' });
   } catch (error) {
@@ -383,15 +369,18 @@ router.post('/grupos', authenticateToken, authorizeRoles('admin', 'owner'), asyn
 
 router.put('/grupos/:jid', authenticateToken, authorizeRoles('admin', 'owner'), async (req, res) => {
   try {
-    const db = getDatabase();
     const { jid } = req.params;
     const { nombre, tipo, proveedor, min_messages, max_warnings, enable_warnings, enable_restriction } = req.body;
     
-    const stmt = await db.prepare(
-      'UPDATE grupos_autorizados SET nombre = ?, tipo = ?, proveedor = ?, min_messages = ?, max_warnings = ?, enable_warnings = ?, enable_restriction = ? WHERE jid = ?'
-    );
-    await stmt.run(nombre, tipo, proveedor, min_messages, max_warnings, enable_warnings, enable_restriction, jid);
-    await stmt.finalize();
+    await db('grupos_autorizados').where({ jid }).update({
+      nombre,
+      tipo,
+      proveedor,
+      min_messages,
+      max_warnings,
+      enable_warnings,
+      enable_restriction
+    });
     
     res.json({ success: true, message: 'Grupo actualizado correctamente' });
   } catch (error) {
@@ -401,10 +390,9 @@ router.put('/grupos/:jid', authenticateToken, authorizeRoles('admin', 'owner'), 
 
 router.delete('/grupos/:jid', authenticateToken, authorizeRoles('admin', 'owner'), async (req, res) => {
   try {
-    const db = getDatabase();
     const { jid } = req.params;
     
-    await db.run('DELETE FROM grupos_autorizados WHERE jid = ?', [jid]);
+    await db('grupos_autorizados').where({ jid }).del();
     
     res.json({ success: true, message: 'Grupo desautorizado correctamente' });
   } catch (error) {
@@ -415,13 +403,12 @@ router.delete('/grupos/:jid', authenticateToken, authorizeRoles('admin', 'owner'
 // Dashboard stats endpoint
 router.get('/dashboard/stats', async (req, res) => {
   try {
-    const db = getDatabase();
-    const usuariosCount = await db.get('SELECT COUNT(*) as count FROM usuarios');
-    const aportesCount = await db.get('SELECT COUNT(*) as count FROM aportes');
-    const pedidosCount = await db.get('SELECT COUNT(*) as count FROM pedidos');
-    const gruposCount = await db.get('SELECT COUNT(*) as count FROM grupos_autorizados');
-    const votacionesCount = await db.get('SELECT COUNT(*) as count FROM votaciones');
-    const manhwasCount = await db.get('SELECT COUNT(*) as count FROM manhwas');
+    const usuariosCount = await db('usuarios').count('id as count').first();
+    const aportesCount = await db('aportes').count('id as count').first();
+    const pedidosCount = await db('pedidos').count('id as count').first();
+    const gruposCount = await db('grupos_autorizados').count('id as count').first();
+    const votacionesCount = await db('votaciones').count('id as count').first();
+    const manhwasCount = await db('manhwas').count('id as count').first();
 
     res.json({
       usuarios: usuariosCount.count,
@@ -439,10 +426,9 @@ router.get('/dashboard/stats', async (req, res) => {
 // Gestión de usuarios (solo admin y owner)
 router.delete('/usuarios/:id', authenticateToken, authorizeRoles('admin', 'owner'), async (req, res) => {
   try {
-    const db = getDatabase();
     const { id } = req.params;
     
-    await db.run('DELETE FROM usuarios WHERE id = ?', [id]);
+    await db('usuarios').where({ id }).del();
     
     res.json({ success: true, message: 'Usuario eliminado correctamente' });
   } catch (error) {
@@ -452,7 +438,6 @@ router.delete('/usuarios/:id', authenticateToken, authorizeRoles('admin', 'owner
 
 router.put('/usuarios/:id', authenticateToken, authorizeRoles('admin', 'owner'), async (req, res) => {
   try {
-    const db = getDatabase();
     const { id } = req.params;
     const { rol } = req.body;
     
@@ -460,9 +445,7 @@ router.put('/usuarios/:id', authenticateToken, authorizeRoles('admin', 'owner'),
       return res.status(400).json({ error: 'Rol no válido' });
     }
     
-    const stmt = await db.prepare('UPDATE usuarios SET rol = ? WHERE id = ?');
-    await stmt.run(rol, id);
-    await stmt.finalize();
+    await db('usuarios').where({ id }).update({ rol });
     
     res.json({ success: true, message: 'Rol de usuario actualizado' });
   } catch (error) {
@@ -473,7 +456,6 @@ router.put('/usuarios/:id', authenticateToken, authorizeRoles('admin', 'owner'),
 // Edición completa de usuario (admin/owner)
 router.put('/usuarios/:id/full-edit', authenticateToken, authorizeRoles('admin', 'owner'), async (req, res) => {
   try {
-    const db = getDatabase();
     const { id } = req.params;
     const { username, rol, whatsapp_number } = req.body;
     
@@ -486,17 +468,19 @@ router.put('/usuarios/:id/full-edit', authenticateToken, authorizeRoles('admin',
     }
     
     // Verificar que el nuevo username no exista (si se está cambiando)
-    const currentUser = await db.get('SELECT username FROM usuarios WHERE id = ?', [id]);
+    const currentUser = await db('usuarios').where({ id }).select('username').first();
     if (currentUser.username !== username) {
-      const existingUser = await db.get('SELECT id FROM usuarios WHERE username = ? AND id != ?', [username, id]);
+      const existingUser = await db('usuarios').where({ username }).whereNot({ id }).first();
       if (existingUser) {
         return res.status(400).json({ error: 'El nombre de usuario ya existe' });
       }
     }
     
-    const stmt = await db.prepare('UPDATE usuarios SET username = ?, rol = ?, whatsapp_number = ? WHERE id = ?');
-    await stmt.run(username, rol, whatsapp_number || null, id);
-    await stmt.finalize();
+    await db('usuarios').where({ id }).update({
+      username,
+      rol,
+      whatsapp_number: whatsapp_number || null
+    });
     
     res.json({ success: true, message: 'Usuario actualizado completamente' });
   } catch (error) {
@@ -507,7 +491,6 @@ router.put('/usuarios/:id/full-edit', authenticateToken, authorizeRoles('admin',
 // Reset password de usuario (admin/owner)
 router.post('/usuarios/:id/reset-password', authenticateToken, authorizeRoles('admin', 'owner'), async (req, res) => {
   try {
-    const db = getDatabase();
     const { id } = req.params;
     
     // Generar nueva contraseña temporal
@@ -515,9 +498,7 @@ router.post('/usuarios/:id/reset-password', authenticateToken, authorizeRoles('a
     const bcrypt = await import('bcrypt');
     const hashedPassword = await bcrypt.hash(newTempPassword, 10);
     
-    const stmt = await db.prepare('UPDATE usuarios SET password = ? WHERE id = ?');
-    await stmt.run(hashedPassword, id);
-    await stmt.finalize();
+    await db('usuarios').where({ id }).update({ password: hashedPassword });
     
     res.json({ 
       success: true, 
@@ -615,13 +596,12 @@ router.get('/proveedores/aportes', authenticateToken, async (req, res) => {
 router.get('/proveedores/download/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const db = getDatabase();
     
     // Obtener información del archivo
-    const aporte = await db.get(
-      'SELECT archivo_path, manhwa_titulo FROM aportes WHERE id = ? AND tipo = ?',
-      [id, 'proveedor_auto']
-    );
+    const aporte = await db('aportes')
+      .where({ id, tipo: 'proveedor_auto' })
+      .select('archivo_path', 'manhwa_titulo')
+      .first();
     
     if (!aporte) {
       return res.status(404).json({ error: 'Archivo no encontrado' });
